@@ -231,12 +231,19 @@ namespace Elders.Cronus.Persistence.MSSQL
                 conn.Open();
                 isConnected = true;
             }
-            catch (SqlException) { }
+            catch (SqlException)
+            { }
             finally
             {
                 conn.Close();
             }
             return isConnected;
+        }
+
+        public static string GetDatabaseName(string connectionString)
+        {
+            SqlConnectionStringBuilder builder = new SqlConnectionStringBuilder(connectionString);
+            return builder.InitialCatalog;
         }
 
     }

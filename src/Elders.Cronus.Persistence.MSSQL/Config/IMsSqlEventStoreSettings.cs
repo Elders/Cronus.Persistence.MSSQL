@@ -1,26 +1,23 @@
 ﻿using System;
 using System.Configuration;
-using System.Reflection;
-using Elders.Cronus.DomainModelling;
-using Elders.Cronus.EventSourcing;
-using Elders.Cronus.EventSourcing.Config;
+using Elders.Cronus.IocContainer;
+using Elders.Cronus.DomainModeling;
+using Elders.Cronus.EventStore;
+using Elders.Cronus.EventStore.Config;
 using Elders.Cronus.Pipeline.Config;
-using Elders.Cronus.Pipeline.Hosts;
 using Elders.Cronus.Serializer;
+using System.Reflection;
 
 namespace Elders.Cronus.Persistence.MSSQL.Config
 {
     public static class MsSqlEventStoreExtensions
     {
-        public static T UseMsSqlEventStore<T>(this T self, Action<MsSqlEventStoreSettings> configure) where T : ICronusSettings, IHaveEventStores
+        public static T UseMsSqlEventStore<T>(this T self, Action<MsSqlEventStoreSettings> configure) where T : IConsumerSettings<ICommand>
         {
-            MsSqlEventStoreSettings settings = new MsSqlEventStoreSettings();
+            MsSqlEventStoreSettings settings = new MsSqlEventStoreSettings(self);
             if (configure != null)
                 configure(settings);
-
-            self.CopySerializerTo(settings);
-
-            self.EventStores.Add((settings as IMsSqlEventStoreSettings).BoundedContext, settings.GetInstanceLazy());
+            (settings as ISettingsBuilder).Build();
             return self;
         }
 
@@ -44,7 +41,7 @@ namespace Elders.Cronus.Persistence.MSSQL.Config
         public static T SetAggregateStatesAssembly<T>(this T self, Assembly aggregateStatesAssembly) where T : IMsSqlEventStoreSettings
         {
             self.BoundedContext = aggregateStatesAssembly.GetAssemblyAttribute<BoundedContextAttribute>().BoundedContextName;
-            self.EventStoreTableNameStrategy = new MsSqlEventStoreTableNameStrategy(self.BoundedContext);
+            self.EventStoreTableNameStrategy = new TablePerAggregateIdGroup(aggregateStatesAssembly);
             return self;
         }
 
@@ -62,25 +59,28 @@ namespace Elders.Cronus.Persistence.MSSQL.Config
         IMsSqlEventStoreTableNameStrategy EventStoreTableNameStrategy { get; set; }
     }
 
-    public class MsSqlEventStoreSettings : IMsSqlEventStoreSettings
+    public class MsSqlEventStoreSettings : SettingsBuilder, IMsSqlEventStoreSettings
     {
+        public MsSqlEventStoreSettings(ISettingsBuilder settingsBuilder) : base(settingsBuilder) { }
+
         string IEventStoreSettings.BoundedContext { get; set; }
 
         string IMsSqlEventStoreSettings.ConnectionString { get; set; }
 
         IMsSqlEventStoreTableNameStrategy IMsSqlEventStoreSettings.EventStoreTableNameStrategy { get; set; }
 
-        ISerializer IHaveSerializer.Serializer { get; set; }
-
-        Lazy<IEventStore> ISettingsBuilder<IEventStore>.Build()
+        public override void Build()
         {
+            var builder = this as ISettingsBuilder;
             IMsSqlEventStoreSettings settings = this as IMsSqlEventStoreSettings;
 
-            var persister = new MsSqlPersister(settings.EventStoreTableNameStrategy, settings.Serializer, settings.ConnectionString);
-            var aggregateRepository = new MsSqlAggregateRepository(persister, settings.EventStoreTableNameStrategy, settings.Serializer, settings.ConnectionString);
-            var player = new MsSqlEventStorePlayer(settings.EventStoreTableNameStrategy, settings.Serializer, settings.ConnectionString);
+            builder.Container.RegisterSingleton<IAggregateRevisionService>(() => new InMemoryAggregateRevisionService(), builder.Name);
+            var eventStore = new MsSqlEventStore(settings.EventStoreTableNameStrategy, builder.Container.Resolve<ISerializer>(), settings.ConnectionString);
+            var aggregateRepository = new AggregateRepository(eventStore, builder.Container.Resolve<IPublisher<IEvent>>(builder.Name), builder.Container.Resolve<IAggregateRevisionService>(builder.Name));
+            //var player = new CassandraEventStorePlayer(settings.Session, settings.EventStoreTableNameStrategy, (this as IEventStoreSettings).BoundedContext, builder.Container.Resolve<ISerializer>());
 
-            return new Lazy<IEventStore>(() => new MsSqlEventStore(aggregateRepository, persister, player, null));
+            builder.Container.RegisterSingleton<IAggregateRepository>(() => aggregateRepository, builder.Name);
+            builder.Container.RegisterSingleton<IEventStore>(() => eventStore, builder.Name);
         }
     }
 }

@@ -16,24 +16,24 @@ let excludePaths (pathsToExclude : string list) (path: string) = pathsToExclude 
 let buildDir  = @"./bin/Release"
 let release = LoadReleaseNotes "RELEASE_NOTES.md"
 
-let projectName = "Cronus"
+let projectName = "Cronus.Persistence.MSSQL"
 let projectSummary = "CQRS + EvetStore framework"
 let projectDescription = "CQRS + EvetStore framework"
 let projectAuthors = ["Nikolai Mynkow"; "Simeon Dimov";]
 
-let packages = ["Cronus", projectDescription]
+let packages = ["Cronus.Persistence.MSSQL", projectDescription]
 let nugetDir = "./bin/nuget"
-let nugetDependencies = getDependencies "./src/Elders.Cronus/packages.config"
+let nugetDependencies = getDependencies "./src/Elders.Cronus.Persistence.MSSQL/packages.config"
 let nugetDependenciesFlat, _ = nugetDependencies |> List.unzip
 let excludeNugetDependencies = excludePaths nugetDependenciesFlat
 
 Target "Clean" (fun _ -> CleanDirs [buildDir])
 
 Target "AssemblyInfo" (fun _ ->
-    CreateCSharpAssemblyInfo @"./src/Elders.Cronus/Properties/AssemblyInfo.cs"
-           [Attribute.Title "Elders.Cronus"
-            Attribute.Description "Elders.Cronus"
-            Attribute.Product "Elders.Cronus"
+    CreateCSharpAssemblyInfo @"./src/Elders.Cronus.Persistence.MSSQL/Properties/AssemblyInfo.cs"
+           [Attribute.Title "Elders.Cronus.Persistence.MSSQL"
+            Attribute.Description "Elders.Cronus.Persistence.MSSQL"
+            Attribute.Product "Elders.Cronus.Persistence.MSSQL"
             Attribute.Version release.AssemblyVersion
             Attribute.InformationalVersion release.AssemblyVersion
             Attribute.FileVersion release.AssemblyVersion]
@@ -53,7 +53,7 @@ Target "RestorePackages" (fun _ ->
 Target "CreateNuGet" (fun _ ->
     for package,description in packages do
     
-        let nugetToolsDir = nugetDir @@ "lib" @@ "net40-full"
+        let nugetToolsDir = nugetDir @@ "lib" @@ "net45-full"
         CleanDir nugetToolsDir
 
         match package with
